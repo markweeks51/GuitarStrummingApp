@@ -129,6 +129,10 @@ const PATTERNS=[
 const keySel=document.getElementById('keySel');
 KEYS.forEach((k,i)=>{const o=document.createElement('option');o.value=i;o.textContent=k;if(i===0)o.selected=true;keySel.appendChild(o);});
 const progSel=document.getElementById('progSel');
+let currentPattern=PATTERNS[0];
+let savedPatterns=[];
+let keyIdx=0, progIdx=0;
+let playing=false, metroOn=false, step=0;
 function progLabel(p){
   return p.degrees.map(deg=>getChord(keyIdx,deg).name).join(' \u2013 ');
 }
@@ -145,10 +149,6 @@ function populateProgSel(){
   if(prevValue!==''){progSel.value=prevValue;}
 }
 populateProgSel();
-let currentPattern=PATTERNS[0];
-let savedPatterns=[];
-let keyIdx=0, progIdx=0;
-let playing=false, metroOn=false, step=0;
 let synth=null, clickSynth=null;
 let mainEventId=null, metroEventId=null;
 
