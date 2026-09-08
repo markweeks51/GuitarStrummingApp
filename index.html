@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chord Progression Trainer</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Chord Trainer">
+<meta name="theme-color" content="#185FA5">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<style>
+:root{
+  --surface-2:#ffffff;--surface-1:#f5f5f4;--surface-0:#efeeea;
+  --text-primary:#1a1a18;--text-secondary:#6b6a65;--text-muted:#9b9a94;
+  --text-accent:#0c447c;--bg-accent:#e6f1fb;--border-accent:#378add;
+  --border:#e2e0d9;--border-strong:#c9c7be;--radius:8px;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --surface-2:#232220;--surface-1:#2c2b28;--surface-0:#1a1918;
+    --text-primary:#f1efe8;--text-secondary:#b4b2a9;--text-muted:#888780;
+    --text-accent:#85b7eb;--bg-accent:#0c447c;--border-accent:#378add;
+    --border:#444441;--border-strong:#5f5e5a;
+  }
+}
+*{box-sizing:border-box;}
+body{background:var(--surface-0);color:var(--text-primary);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;margin:0;padding:16px;padding-bottom:48px;}
+.wrap{max-width:480px;margin:0 auto;}
+h1{font-size:18px;font-weight:600;margin:0 0 16px;}
+button{background:var(--surface-2);border:1px solid var(--border-strong);border-radius:var(--radius);padding:9px 14px;font-size:14px;color:var(--text-primary);cursor:pointer;}
+button:active{transform:scale(0.98);}
+select{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:8px;font-size:14px;color:var(--text-primary);}
+input[type=range]{width:100%;}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Chord progression trainer</h1>
+<div style="display:flex;gap:8px;margin-bottom:10px;">
+  <select id="keySel" style="flex:1;"></select>
+  <select id="progSel" style="flex:2;"></select>
+</div>
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+  <button id="playBtn" style="min-width:84px;">&#9654; Play</button>
+  <button id="metroBtn" style="min-width:110px;">Metronome</button>
+  <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:160px;">
+    <label style="font-size:13px;color:var(--text-secondary);">Tempo</label>
+    <input type="range" id="bpm" min="60" max="160" step="1" value="90" style="flex:1;">
+    <span id="bpmOut" style="font-size:13px;font-weight:500;min-width:30px;">90</span>
+  </div>
+</div>
+
+<div style="background:var(--surface-1);border-radius:12px;padding:1rem 1.25rem;margin-bottom:14px;">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;">
+    <div>
+      <div style="font-size:13px;color:var(--text-secondary);">Now playing</div>
+      <div id="nowChord" style="font-size:24px;font-weight:500;">&ndash;</div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-size:13px;color:var(--text-secondary);">Coming next</div>
+      <div id="nextChord" style="font-size:16px;font-weight:500;color:var(--text-secondary);">&ndash;</div>
+    </div>
+  </div>
+  <div id="notesRow" style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;"></div>
+</div>
+
+<div id="progChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;"></div>
+
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+  <span style="font-size:13px;color:var(--text-secondary);">Strumming pattern</span>
+  <div style="display:flex;gap:8px;">
+    <button id="refreshBtn">&#8635; Refresh</button>
+    <button id="saveBtn">&#10003; Save</button>
+  </div>
+</div>
+<div id="strumRow" style="display:grid;grid-template-columns:repeat(8,1fr);gap:4px;margin-bottom:8px;"></div>
+<div id="savedRow" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;"></div>
+
+<div style="font-size:13px;color:var(--text-secondary);margin-bottom:6px;">Fretboard &ndash; where these notes sit (frets 0&ndash;12)</div>
+<div id="fretboard" style="overflow-x:auto;"></div>
+<div id="fbLegend" style="display:flex;gap:14px;margin-top:8px;"></div>
+</div>
+
+<script>
+const KEYS=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const SCALE=[0,2,4,5,7,9,11];
+const QUAL=['maj','min','min','maj','maj','min','dim'];
+const ROMAN=['I','ii','iii','IV','V','vi','vii°'];
+function getChord(keyIdx,degree){
+  const rootPc=(keyIdx+SCALE[degree])%12;
+  const q=QUAL[degree];
+  const t3=(q==='min'||q==='dim')?3:4;
+  const t5=q==='dim'?6:7;
+  const suffix=q==='maj'?'':q==='min'?'m':'dim';
+  return {rootPc,t3,t5,name:KEYS[rootPc]+suffix,notes:[KEYS[rootPc],KEYS[(rootPc+t3)%12],KEYS[(rootPc+t5)%12]],roman:ROMAN[degree]};
+}
+const PROGS=[
+ {len:3,label:'I – IV – V',degrees:[0,3,4]},
+ {len:3,label:'I – V – IV',degrees:[0,4,3]},
+ {len:3,label:'vi – IV – I',degrees:[5,3,0]},
+ {len:3,label:'ii – V – I',degrees:[1,4,0]},
+ {len:3,label:'I – vi – IV',degrees:[0,5,3]},
+ {len:4,label:'I – V – vi – IV',degrees:[0,4,5,3]},
+ {len:4,label:'vi – IV – I – V',degrees:[5,3,0,4]},
+ {len:4,label:'I – vi – IV – V',degrees:[0,5,3,4]},
+ {len:4,label:'I – IV – vi – V',degrees:[0,3,5,4]},
+ {len:4,label:'ii – V – I – vi',degrees:[1,4,0,5]},
+ {len:4,label:'I – vi – ii – V',degrees:[0,5,1,4]},
+ {len:5,label:'I – V – vi – IV – I',degrees:[0,4,5,3,0]},
+ {len:5,label:'vi – IV – I – V – vi',degrees:[5,3,0,4,5]},
+ {len:5,label:'I – vi – IV – V – I',degrees:[0,5,3,4,0]},
+ {len:5,label:'I – iii – IV – V – vi',degrees:[0,2,3,4,5]},
+];
+const PATTERNS=[
+ ['D',null,'D','U',null,'U','D','U'],
+ ['D',null,'U',null,'U',null,'U',null],
+ ['D',null,'D',null,'D','U',null,'U'],
+ ['D','U',null,'U',null,'U','D',null],
+ ['D',null,null,'U','D',null,'U',null],
+ ['D',null,'U','U',null,'U',null,'D'],
+ ['D','D',null,'U',null,'U','D',null],
+ ['D',null,'D','U','D',null,'U',null],
+ ['D',null,'U',null,'D','U',null,'U'],
+ ['D','U',null,'D','U',null,'D','U'],
+];
+const keySel=document.getElementById('keySel');
+KEYS.forEach((k,i)=>{const o=document.createElement('option');o.value=i;o.textContent=k;if(i===0)o.selected=true;keySel.appendChild(o);});
+const progSel=document.getElementById('progSel');
+function progLabel(p){
+  return p.degrees.map(deg=>getChord(keyIdx,deg).name).join(' \u2013 ');
+}
+function populateProgSel(){
+  const prevValue=progSel.value;
+  progSel.innerHTML='';
+  [3,4,5].forEach(len=>{
+    const og=document.createElement('optgroup');og.label=len+'-chord';
+    PROGS.filter(p=>p.len===len).forEach(p=>{
+      const o=document.createElement('option');o.value=PROGS.indexOf(p);o.textContent=progLabel(p);og.appendChild(o);
+    });
+    progSel.appendChild(og);
+  });
+  if(prevValue!==''){progSel.value=prevValue;}
+}
+populateProgSel();
+let currentPattern=PATTERNS[0];
+let savedPatterns=[];
+let keyIdx=0, progIdx=0;
+let playing=false, metroOn=false, step=0;
+let synth=null, clickSynth=null;
+let mainEventId=null, metroEventId=null;
+
+function currentProg(){return PROGS[progIdx];}
+function chordAt(barIdx){
+  const p=currentProg();
+  const deg=p.degrees[barIdx%p.degrees.length];
+  return getChord(keyIdx,deg);
+}
+function renderProgChips(){
+  const row=document.getElementById('progChips');
+  row.innerHTML='';
+  const p=currentProg();
+  p.degrees.forEach((deg,i)=>{
+    const c=getChord(keyIdx,deg);
+    const chip=document.createElement('div');
+    chip.id='chip-'+i;
+    chip.style.cssText='padding:4px 10px;border-radius:var(--radius);border:1px solid var(--border);font-size:13px;';
+    chip.textContent=c.name;
+    row.appendChild(chip);
+  });
+}
+function highlightChip(i){
+  const p=currentProg();
+  p.degrees.forEach((_,idx)=>{
+    const el=document.getElementById('chip-'+idx);
+    if(!el)return;
+    if(idx===i){el.style.background='var(--bg-accent)';el.style.color='var(--text-accent)';el.style.borderColor='var(--border-accent)';}
+    else{el.style.background='';el.style.color='';el.style.borderColor='var(--border)';}
+  });
+}
+const STRING_PC=[4,9,2,7,11,4];
+const STRING_LABEL=['E','A','D','G','B','e'];
+const FRET_MARKERS=[3,5,7,9,12];
+function renderFretboard(chord){
+  const numFrets=12;
+  const leftPad=20, topPad=12, fretSp=30, strSp=20;
+  const gw=numFrets*fretSp, gh=5*strSp;
+  const w=leftPad+gw+14, h=topPad+gh+22;
+  let s='<svg viewBox="0 0 '+w+' '+h+'" width="100%" style="max-width:'+w+'px;display:block;">';
+  const midY=topPad+gh/2;
+  FRET_MARKERS.forEach(f=>{
+    const x=leftPad+(f-0.5)*fretSp;
+    if(f===12){
+      s+='<circle cx="'+x+'" cy="'+(midY-strSp)+'" r="2.5" style="fill:var(--text-muted);opacity:0.5;"/>';
+      s+='<circle cx="'+x+'" cy="'+(midY+strSp)+'" r="2.5" style="fill:var(--text-muted);opacity:0.5;"/>';
+    } else {
+      s+='<circle cx="'+x+'" cy="'+midY+'" r="2.5" style="fill:var(--text-muted);opacity:0.5;"/>';
+    }
+  });
+  for(let f=0;f<=numFrets;f++){
+    const x=leftPad+f*fretSp;
+    s+='<line x1="'+x+'" y1="'+topPad+'" x2="'+x+'" y2="'+(topPad+gh)+'" style="stroke:var(--border-strong);stroke-width:'+(f===0?3:1)+';"/>';
+    s+='<text x="'+x+'" y="'+(topPad+gh+16)+'" text-anchor="middle" style="fill:var(--text-muted);font-size:9px;">'+f+'</text>';
+  }
+  for(let i=0;i<6;i++){
+    const y=topPad+i*strSp;
+    s+='<line x1="'+leftPad+'" y1="'+y+'" x2="'+(leftPad+gw)+'" y2="'+y+'" style="stroke:var(--border);stroke-width:1;"/>';
+    s+='<text x="6" y="'+(y+4)+'" style="fill:var(--text-secondary);font-size:10px;">'+STRING_LABEL[i]+'</text>';
+  }
+  for(let i=0;i<6;i++){
+    for(let f=0;f<=numFrets;f++){
+      const pc=(STRING_PC[i]+f)%12;
+      let role=null,note=null;
+      if(pc===chord.rootPc){role='root';note=chord.notes[0];}
+      else if(pc===(chord.rootPc+chord.t3)%12){role='third';note=chord.notes[1];}
+      else if(pc===(chord.rootPc+chord.t5)%12){role='fifth';note=chord.notes[2];}
+      if(role){
+        const x=leftPad+f*fretSp, y=topPad+i*strSp;
+        const color=role==='root'?'#185FA5':role==='third'?'#0F6E56':'#993C1D';
+        s+='<circle cx="'+x+'" cy="'+y+'" r="7.5" style="fill:'+color+';"/>';
+        s+='<text x="'+x+'" y="'+(y+2.6)+'" text-anchor="middle" style="fill:#fff;font-size:8px;font-weight:600;">'+note+'</text>';
+      }
+    }
+  }
+  s+='</svg>';
+  document.getElementById('fretboard').innerHTML=s;
+  const legend=document.getElementById('fbLegend');
+  legend.innerHTML='';
+  [['#185FA5','Root'],['#0F6E56','3rd'],['#993C1D','5th']].forEach(([c,l])=>{
+    const item=document.createElement('div');
+    item.style.cssText='display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);';
+    item.innerHTML='<span style="width:9px;height:9px;border-radius:50%;background:'+c+';display:inline-block;"></span>'+l;
+    legend.appendChild(item);
+  });
+}
+function updateNowNext(barIdx){
+  const cur=chordAt(barIdx);
+  const nxt=chordAt(barIdx+1);
+  document.getElementById('nowChord').textContent=cur.name;
+  document.getElementById('nextChord').textContent=nxt.name;
+  const notesRow=document.getElementById('notesRow');
+  notesRow.innerHTML='';
+  cur.notes.forEach((n,i)=>{
+    const b=document.createElement('span');
+    b.style.cssText='background:var(--bg-accent);color:var(--text-accent);font-size:13px;padding:4px 10px;border-radius:var(--radius);';
+    b.textContent=n+(i===0?' (root)':'');
+    notesRow.appendChild(b);
+  });
+  highlightChip(barIdx%currentProg().degrees.length);
+  renderFretboard(cur);
+}
+function renderStrum(){
+  const row=document.getElementById('strumRow');
+  row.innerHTML='';
+  currentPattern.forEach((v,i)=>{
+    const box=document.createElement('div');
+    box.id='beat-'+i;
+    box.style.cssText='aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:var(--radius);border:1px solid var(--border);font-size:16px;';
+    box.textContent=v==='D'?'\u2193':v==='U'?'\u2191':'';
+    row.appendChild(box);
+  });
+}
+function highlightBeat(i){
+  for(let j=0;j<8;j++){
+    const el=document.getElementById('beat-'+j);
+    if(!el)continue;
+    if(j===i){el.style.background='var(--bg-accent)';el.style.borderColor='var(--border-accent)';}
+    else{el.style.background='';el.style.borderColor='var(--border)';}
+  }
+}
+function renderSaved(){
+  const row=document.getElementById('savedRow');
+  row.innerHTML='';
+  savedPatterns.forEach((p,i)=>{
+    const chip=document.createElement('button');
+    chip.style.cssText='font-size:12px;padding:4px 10px;';
+    chip.textContent='Saved '+(i+1);
+    chip.onclick=()=>{currentPattern=p;renderStrum();};
+    row.appendChild(chip);
+  });
+}
+function pickNewPattern(){
+  let next=currentPattern;
+  while(next===currentPattern){
+    next=PATTERNS[Math.floor(Math.random()*PATTERNS.length)];
+  }
+  currentPattern=next;
+  renderStrum();
+}
+document.getElementById('refreshBtn').onclick=pickNewPattern;
+document.getElementById('saveBtn').onclick=()=>{
+  if(!savedPatterns.includes(currentPattern)){savedPatterns.push(currentPattern);renderSaved();}
+};
+keySel.onchange=()=>{keyIdx=+keySel.value;populateProgSel();renderProgChips();updateNowNext(Math.floor(step/8));};
+progSel.onchange=()=>{progIdx=+progSel.value;step=0;renderProgChips();updateNowNext(0);};
+document.getElementById('bpm').oninput=(e)=>{
+  document.getElementById('bpmOut').textContent=e.target.value;
+  if(Tone.Transport)Tone.Transport.bpm.value=+e.target.value;
+};
+
+function buildVoicing(chord){
+  const rootMidi=48+chord.rootPc;
+  const midis=[rootMidi,rootMidi+chord.t3,rootMidi+chord.t5,rootMidi+12];
+  return midis.map(m=>Tone.Frequency(m,'midi').toNote());
+}
+function playStrum(notes,dir,time){
+  const order=dir==='D'?notes:[...notes].reverse();
+  order.forEach((n,i)=>{
+    synth.triggerAttackRelease(n,'4n',time+i*0.014);
+  });
+}
+async function ensureAudio(){
+  if(Tone.context.state!=='running'){await Tone.start();}
+  if(!synth){
+    synth=new Tone.PolySynth(Tone.Synth,{oscillator:{type:'triangle'},envelope:{attack:0.005,decay:0.1,sustain:0.25,release:0.6}}).toDestination();
+  }
+  if(!clickSynth){
+    clickSynth=new Tone.Synth({oscillator:{type:'square'},envelope:{attack:0.001,decay:0.03,sustain:0,release:0.03}}).toDestination();
+    clickSynth.volume.value=-8;
+  }
+}
+async function togglePlay(){
+  if(!playing){
+    await ensureAudio();
+    step=0;
+    Tone.Transport.bpm.value=+document.getElementById('bpm').value;
+    if(mainEventId!==null){Tone.Transport.clear(mainEventId);}
+    mainEventId=Tone.Transport.scheduleRepeat((time)=>{
+      const slotIdx=step%8;
+      const barIdx=Math.floor(step/8);
+      const chord=chordAt(barIdx);
+      if(slotIdx===0){
+        Tone.Draw.schedule(()=>{updateNowNext(barIdx);},time);
+      }
+      const val=currentPattern[slotIdx];
+      if(val){playStrum(buildVoicing(chord),val,time);}
+      Tone.Draw.schedule(()=>{highlightBeat(slotIdx);},time);
+      step++;
+    },'8n');
+    if(Tone.Transport.state!=='started'){Tone.Transport.start();}
+    playing=true;
+    document.getElementById('playBtn').innerHTML='&#9208; Stop';
+  } else {
+    if(mainEventId!==null){Tone.Transport.clear(mainEventId);mainEventId=null;}
+    playing=false;
+    step=0;
+    highlightBeat(-1);
+    if(!metroOn){Tone.Transport.stop();}
+    document.getElementById('playBtn').innerHTML='&#9654; Play';
+  }
+}
+document.getElementById('playBtn').onclick=togglePlay;
+
+async function toggleMetro(){
+  if(!metroOn){
+    await ensureAudio();
+    Tone.Transport.bpm.value=+document.getElementById('bpm').value;
+    let beatCount=0;
+    if(metroEventId!==null){Tone.Transport.clear(metroEventId);}
+    metroEventId=Tone.Transport.scheduleRepeat((time)=>{
+      const accent=beatCount%4===0;
+      clickSynth.triggerAttackRelease(accent?'A5':'A4','32n',time);
+      beatCount++;
+    },'4n');
+    if(Tone.Transport.state!=='started'){Tone.Transport.start();}
+    metroOn=true;
+    document.getElementById('metroBtn').style.background='var(--bg-accent)';
+    document.getElementById('metroBtn').style.color='var(--text-accent)';
+  } else {
+    if(metroEventId!==null){Tone.Transport.clear(metroEventId);metroEventId=null;}
+    metroOn=false;
+    if(!playing){Tone.Transport.stop();}
+    document.getElementById('metroBtn').style.background='';
+    document.getElementById('metroBtn').style.color='';
+  }
+}
+document.getElementById('metroBtn').onclick=toggleMetro;
+
+renderProgChips();
+updateNowNext(0);
+renderStrum();
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>
