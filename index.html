@@ -44,7 +44,6 @@ input[type=range]{width:100%;}
   <select id="progSel" style="flex:2;"></select>
 </div>
 <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
-  <button id="playBtn" style="min-width:84px;">&#9654; Play</button>
   <button id="metroBtn" style="min-width:110px;">Metronome</button>
   <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:160px;">
     <label style="font-size:13px;color:var(--text-secondary);">Tempo</label>
@@ -82,6 +81,8 @@ input[type=range]{width:100%;}
 <div style="font-size:13px;color:var(--text-secondary);margin-bottom:6px;">Fretboard &ndash; where these notes sit (frets 0&ndash;12)</div>
 <div id="fretboard" style="overflow-x:auto;"></div>
 <div id="fbLegend" style="display:flex;gap:14px;margin-top:8px;"></div>
+
+<button id="playBtn" style="width:100%;padding:22px 0;font-size:22px;font-weight:600;border-radius:14px;margin-top:20px;">&#9654; Play</button>
 </div>
 
 <script>
@@ -150,7 +151,7 @@ function populateProgSel(){
 }
 populateProgSel();
 let synth=null, clickSynth=null;
-let mainEventId=null, metroEventId=null;
+let engineEventId=null;
 
 function currentProg(){return PROGS[progIdx];}
 function chordAt(barIdx){
@@ -180,8 +181,8 @@ function highlightChip(i){
     else{el.style.background='';el.style.color='';el.style.borderColor='var(--border)';}
   });
 }
-const STRING_PC=[4,9,2,7,11,4];
-const STRING_LABEL=['E','A','D','G','B','e'];
+const STRING_PC=[4,11,7,2,9,4];
+const STRING_LABEL=['e','B','G','D','A','E'];
 const FRET_MARKERS=[3,5,7,9,12];
 function renderFretboard(chord){
   const numFrets=12;
@@ -321,33 +322,48 @@ async function ensureAudio(){
     clickSynth.volume.value=-8;
   }
 }
+function startEngine(){
+  Tone.Transport.bpm.value=+document.getElementById('bpm').value;
+  if(engineEventId===null){
+    step=0;
+    engineEventId=Tone.Transport.scheduleRepeat((time)=>{
+      const slotIdx=step%8;
+      const barIdx=Math.floor(step/8);
+      if(playing){
+        const chord=chordAt(barIdx);
+        if(slotIdx===0){
+          Tone.Draw.schedule(()=>{updateNowNext(barIdx);},time);
+        }
+        const val=currentPattern[slotIdx];
+        if(val){playStrum(buildVoicing(chord),val,time);}
+        Tone.Draw.schedule(()=>{highlightBeat(slotIdx);},time);
+      }
+      if(metroOn && slotIdx%2===0){
+        const accent=slotIdx===0;
+        clickSynth.triggerAttackRelease(accent?'A5':'A4','32n',time);
+      }
+      step++;
+    },'8n');
+  }
+  if(Tone.Transport.state!=='started'){Tone.Transport.start();}
+}
+function stopEngineIfIdle(){
+  if(!playing && !metroOn){
+    if(engineEventId!==null){Tone.Transport.clear(engineEventId);engineEventId=null;}
+    Tone.Transport.stop();
+    step=0;
+  }
+}
 async function togglePlay(){
   if(!playing){
     await ensureAudio();
-    step=0;
-    Tone.Transport.bpm.value=+document.getElementById('bpm').value;
-    if(mainEventId!==null){Tone.Transport.clear(mainEventId);}
-    mainEventId=Tone.Transport.scheduleRepeat((time)=>{
-      const slotIdx=step%8;
-      const barIdx=Math.floor(step/8);
-      const chord=chordAt(barIdx);
-      if(slotIdx===0){
-        Tone.Draw.schedule(()=>{updateNowNext(barIdx);},time);
-      }
-      const val=currentPattern[slotIdx];
-      if(val){playStrum(buildVoicing(chord),val,time);}
-      Tone.Draw.schedule(()=>{highlightBeat(slotIdx);},time);
-      step++;
-    },'8n');
-    if(Tone.Transport.state!=='started'){Tone.Transport.start();}
     playing=true;
+    startEngine();
     document.getElementById('playBtn').innerHTML='&#9208; Stop';
   } else {
-    if(mainEventId!==null){Tone.Transport.clear(mainEventId);mainEventId=null;}
     playing=false;
-    step=0;
     highlightBeat(-1);
-    if(!metroOn){Tone.Transport.stop();}
+    stopEngineIfIdle();
     document.getElementById('playBtn').innerHTML='&#9654; Play';
   }
 }
@@ -356,22 +372,13 @@ document.getElementById('playBtn').onclick=togglePlay;
 async function toggleMetro(){
   if(!metroOn){
     await ensureAudio();
-    Tone.Transport.bpm.value=+document.getElementById('bpm').value;
-    let beatCount=0;
-    if(metroEventId!==null){Tone.Transport.clear(metroEventId);}
-    metroEventId=Tone.Transport.scheduleRepeat((time)=>{
-      const accent=beatCount%4===0;
-      clickSynth.triggerAttackRelease(accent?'A5':'A4','32n',time);
-      beatCount++;
-    },'4n');
-    if(Tone.Transport.state!=='started'){Tone.Transport.start();}
     metroOn=true;
+    startEngine();
     document.getElementById('metroBtn').style.background='var(--bg-accent)';
     document.getElementById('metroBtn').style.color='var(--text-accent)';
   } else {
-    if(metroEventId!==null){Tone.Transport.clear(metroEventId);metroEventId=null;}
     metroOn=false;
-    if(!playing){Tone.Transport.stop();}
+    stopEngineIfIdle();
     document.getElementById('metroBtn').style.background='';
     document.getElementById('metroBtn').style.color='';
   }
