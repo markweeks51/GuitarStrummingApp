@@ -218,7 +218,7 @@ function renderFretboard(chord){
       else if(pc===(chord.rootPc+chord.t3)%12){role='third';note=chord.notes[1];}
       else if(pc===(chord.rootPc+chord.t5)%12){role='fifth';note=chord.notes[2];}
       if(role){
-        const x=leftPad+f*fretSp, y=topPad+i*strSp;
+        const x=f===0?leftPad:leftPad+(f-0.5)*fretSp, y=topPad+i*strSp;
         const color=role==='root'?'#185FA5':role==='third'?'#0F6E56':'#993C1D';
         s+='<circle cx="'+x+'" cy="'+y+'" r="7.5" style="fill:'+color+';"/>';
         s+='<text x="'+x+'" y="'+(y+2.6)+'" text-anchor="middle" style="fill:#fff;font-size:8px;font-weight:600;">'+note+'</text>';
