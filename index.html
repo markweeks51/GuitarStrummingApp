@@ -83,6 +83,19 @@ input[type=range]{width:100%;}
 <div id="fbLegend" style="display:flex;gap:14px;margin-top:8px;"></div>
 
 <button id="playBtn" style="width:100%;padding:22px 0;font-size:22px;font-weight:600;border-radius:14px;margin-top:20px;">&#9654; Play</button>
+
+<div style="margin-top:28px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+    <span style="font-size:13px;color:var(--text-secondary);">Soloing scale map</span>
+    <div style="display:flex;gap:8px;">
+      <button id="scaleMajBtn">Major</button>
+      <button id="scalePenBtn">Minor pent.</button>
+    </div>
+  </div>
+  <div id="scaleNotes" style="font-size:13px;font-weight:500;margin-bottom:8px;"></div>
+  <div id="scaleBoard" style="overflow-x:auto;"></div>
+  <div id="scaleLegend" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;"></div>
+</div>
 </div>
 
 <script>
@@ -203,7 +216,8 @@ function renderFretboard(chord){
   for(let f=0;f<=numFrets;f++){
     const x=leftPad+f*fretSp;
     s+='<line x1="'+x+'" y1="'+topPad+'" x2="'+x+'" y2="'+(topPad+gh)+'" style="stroke:var(--border-strong);stroke-width:'+(f===0?3:1)+';"/>';
-    s+='<text x="'+x+'" y="'+(topPad+gh+16)+'" text-anchor="middle" style="fill:var(--text-muted);font-size:9px;">'+f+'</text>';
+    const lx=f===0?x:leftPad+(f-0.5)*fretSp;
+    s+='<text x="'+lx+'" y="'+(topPad+gh+16)+'" text-anchor="middle" style="fill:var(--text-muted);font-size:9px;">'+f+'</text>';
   }
   for(let i=0;i<6;i++){
     const y=topPad+i*strSp;
@@ -234,6 +248,75 @@ function renderFretboard(chord){
     item.style.cssText='display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);';
     item.innerHTML='<span style="width:9px;height:9px;border-radius:50%;background:'+c+';display:inline-block;"></span>'+l;
     legend.appendChild(item);
+  });
+}
+
+/* ---------- Scale fretboard (major / minor pentatonic) ---------- */
+const MAJOR_INTERVALS=[0,2,4,5,7,9,11];
+const MINPENT_INTERVALS=[0,3,5,7,10];
+let scaleMode='major';
+function renderScaleBoard(){
+  const intervals=scaleMode==='major'?MAJOR_INTERVALS:MINPENT_INTERVALS;
+  // Minor pentatonic uses the RELATIVE minor (vi) so every note stays inside the key
+  const rootPc=scaleMode==='major'?keyIdx:(keyIdx+9)%12;
+  const names=intervals.map(iv=>KEYS[(rootPc+iv)%12]);
+  const numFrets=12;
+  const leftPad=20, topPad=12, fretSp=30, strSp=20;
+  const gw=numFrets*fretSp, gh=5*strSp;
+  const w=leftPad+gw+14, h=topPad+gh+22;
+  let s='<svg viewBox="0 0 '+w+' '+h+'" width="100%" style="max-width:'+w+'px;display:block;">';
+  const midY=topPad+gh/2;
+  FRET_MARKERS.forEach(f=>{
+    const x=leftPad+(f-0.5)*fretSp;
+    if(f===12){
+      s+='<circle cx="'+x+'" cy="'+(midY-strSp)+'" r="2.5" style="fill:var(--text-muted);opacity:0.5;"/>';
+      s+='<circle cx="'+x+'" cy="'+(midY+strSp)+'" r="2.5" style="fill:var(--text-muted);opacity:0.5;"/>';
+    } else {
+      s+='<circle cx="'+x+'" cy="'+midY+'" r="2.5" style="fill:var(--text-muted);opacity:0.5;"/>';
+    }
+  });
+  for(let f=0;f<=numFrets;f++){
+    const x=leftPad+f*fretSp;
+    s+='<line x1="'+x+'" y1="'+topPad+'" x2="'+x+'" y2="'+(topPad+gh)+'" style="stroke:var(--border-strong);stroke-width:'+(f===0?3:1)+';"/>';
+    const lx=f===0?x:leftPad+(f-0.5)*fretSp;
+    s+='<text x="'+lx+'" y="'+(topPad+gh+16)+'" text-anchor="middle" style="fill:var(--text-muted);font-size:9px;">'+f+'</text>';
+  }
+  for(let i=0;i<6;i++){
+    const y=topPad+i*strSp;
+    s+='<line x1="'+leftPad+'" y1="'+y+'" x2="'+(leftPad+gw)+'" y2="'+y+'" style="stroke:var(--border);stroke-width:1;"/>';
+    s+='<text x="6" y="'+(y+4)+'" style="fill:var(--text-secondary);font-size:10px;">'+STRING_LABEL[i]+'</text>';
+  }
+  for(let i=0;i<6;i++){
+    for(let f=0;f<=numFrets;f++){
+      const pc=(STRING_PC[i]+f)%12;
+      const idx=intervals.indexOf((pc-rootPc+12)%12);
+      if(idx!==-1){
+        const x=f===0?leftPad:leftPad+(f-0.5)*fretSp, y=topPad+i*strSp;
+        const color=idx===0?'#185FA5':(scaleMode!=='major'&&pc===keyIdx)?'#0F6E56':'#5F5E5A';
+        s+='<circle cx="'+x+'" cy="'+y+'" r="7.5" style="fill:'+color+';"/>';
+        s+='<text x="'+x+'" y="'+(y+2.6)+'" text-anchor="middle" style="fill:#fff;font-size:8px;font-weight:600;">'+names[idx]+'</text>';
+      }
+    }
+  }
+  s+='</svg>';
+  document.getElementById('scaleBoard').innerHTML=s;
+  document.getElementById('scaleNotes').textContent=scaleMode==='major'
+    ? KEYS[keyIdx]+' major scale: '+names.join(' – ')
+    : KEYS[rootPc]+' minor pentatonic (relative minor of '+KEYS[keyIdx]+'): '+names.join(' – ');
+  const lg=document.getElementById('scaleLegend');
+  lg.innerHTML='';
+  (scaleMode==='major'?[['#185FA5','Root ('+KEYS[keyIdx]+')'],['#5F5E5A','Scale notes']]:[['#185FA5','Pentatonic root ('+KEYS[rootPc]+'m)'],['#0F6E56','Key tonic ('+KEYS[keyIdx]+')'],['#5F5E5A','Scale notes']]).forEach(([c,l])=>{
+    const item=document.createElement('div');
+    item.style.cssText='display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);';
+    item.innerHTML='<span style="width:9px;height:9px;border-radius:50%;background:'+c+';display:inline-block;"></span>'+l;
+    lg.appendChild(item);
+  });
+  const majBtn=document.getElementById('scaleMajBtn'), penBtn=document.getElementById('scalePenBtn');
+  [[majBtn,'major'],[penBtn,'pent']].forEach(([b,m])=>{
+    const on=(m==='major')===(scaleMode==='major');
+    b.style.background=on?'var(--bg-accent)':'';
+    b.style.color=on?'var(--text-accent)':'';
+    b.style.borderColor=on?'var(--border-accent)':'';
   });
 }
 function updateNowNext(barIdx){
@@ -294,7 +377,7 @@ document.getElementById('refreshBtn').onclick=pickNewPattern;
 document.getElementById('saveBtn').onclick=()=>{
   if(!savedPatterns.includes(currentPattern)){savedPatterns.push(currentPattern);renderSaved();}
 };
-keySel.onchange=()=>{keyIdx=+keySel.value;populateProgSel();renderProgChips();updateNowNext(Math.floor(step/8));};
+keySel.onchange=()=>{keyIdx=+keySel.value;populateProgSel();renderProgChips();updateNowNext(Math.floor(step/8));renderScaleBoard();};
 progSel.onchange=()=>{progIdx=+progSel.value;step=0;renderProgChips();updateNowNext(0);};
 document.getElementById('bpm').oninput=(e)=>{
   document.getElementById('bpmOut').textContent=e.target.value;
@@ -385,9 +468,12 @@ async function toggleMetro(){
 }
 document.getElementById('metroBtn').onclick=toggleMetro;
 
+document.getElementById('scaleMajBtn').onclick=()=>{scaleMode='major';renderScaleBoard();};
+document.getElementById('scalePenBtn').onclick=()=>{scaleMode='pent';renderScaleBoard();};
 renderProgChips();
 updateNowNext(0);
 renderStrum();
+renderScaleBoard();
 
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>{
