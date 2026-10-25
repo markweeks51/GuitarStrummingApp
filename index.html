@@ -180,8 +180,13 @@ function renderProgChips(){
     const c=getChord(keyIdx,deg);
     const chip=document.createElement('div');
     chip.id='chip-'+i;
-    chip.style.cssText='padding:4px 10px;border-radius:var(--radius);border:1px solid var(--border);font-size:13px;';
+    chip.style.cssText='padding:8px 14px;border-radius:var(--radius);border:1px solid var(--border);font-size:14px;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent;';
+    chip.setAttribute('role','button');
     chip.textContent=c.name;
+    chip.onclick=()=>{
+      if(playing){togglePlay();}
+      updateNowNext(i);
+    };
     row.appendChild(chip);
   });
 }
@@ -319,7 +324,9 @@ function renderScaleBoard(){
     b.style.borderColor=on?'var(--border-accent)':'';
   });
 }
+let selectedBar=0;
 function updateNowNext(barIdx){
+  selectedBar=barIdx%currentProg().degrees.length;
   const cur=chordAt(barIdx);
   const nxt=chordAt(barIdx+1);
   document.getElementById('nowChord').textContent=cur.name;
@@ -377,7 +384,7 @@ document.getElementById('refreshBtn').onclick=pickNewPattern;
 document.getElementById('saveBtn').onclick=()=>{
   if(!savedPatterns.includes(currentPattern)){savedPatterns.push(currentPattern);renderSaved();}
 };
-keySel.onchange=()=>{keyIdx=+keySel.value;populateProgSel();renderProgChips();updateNowNext(Math.floor(step/8));renderScaleBoard();};
+keySel.onchange=()=>{keyIdx=+keySel.value;populateProgSel();renderProgChips();updateNowNext(playing?Math.floor(step/8):selectedBar);renderScaleBoard();};
 progSel.onchange=()=>{progIdx=+progSel.value;step=0;renderProgChips();updateNowNext(0);};
 document.getElementById('bpm').oninput=(e)=>{
   document.getElementById('bpmOut').textContent=e.target.value;
