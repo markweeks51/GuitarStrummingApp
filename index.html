@@ -112,6 +112,7 @@ function getChord(keyIdx,degree){
   return {rootPc,t3,t5,name:KEYS[rootPc]+suffix,notes:[KEYS[rootPc],KEYS[(rootPc+t3)%12],KEYS[(rootPc+t5)%12]],roman:ROMAN[degree]};
 }
 const PROGS=[
+ {len:7,label:'All chords in key',degrees:[0,1,2,3,4,5,6]},
  {len:3,label:'I – IV – V',degrees:[0,3,4]},
  {len:3,label:'I – V – IV',degrees:[0,4,3]},
  {len:3,label:'vi – IV – I',degrees:[5,3,0]},
@@ -153,8 +154,8 @@ function progLabel(p){
 function populateProgSel(){
   const prevValue=progSel.value;
   progSel.innerHTML='';
-  [3,4,5].forEach(len=>{
-    const og=document.createElement('optgroup');og.label=len+'-chord';
+  [7,3,4,5].forEach(len=>{
+    const og=document.createElement('optgroup');og.label=len===7?'Chords in this key':len+'-chord progressions';
     PROGS.filter(p=>p.len===len).forEach(p=>{
       const o=document.createElement('option');o.value=PROGS.indexOf(p);o.textContent=progLabel(p);og.appendChild(o);
     });
